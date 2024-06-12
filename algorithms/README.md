@@ -2,7 +2,7 @@
 
 This folder contains implementations of various machine learning algorithms. Below is a list of algorithms that need to be implemented:
 
-1. Linear Regression
+1. Linear Regression [x]
 2. Logistic Regression
 3. Decision Trees
 4. Random Forest
