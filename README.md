@@ -54,6 +54,4 @@ pip install -r requirements.txt
 
 3. **Explore and Use the Library in Your Projects!**
 
----
 
-Так, как это выглядит для вас?
