@@ -5,29 +5,16 @@ import random
 class LineRegression:                                                                                                                                                                                                                                                        
                                                                                                                                               
     def __init__(self, n_iter=100, learning_rate=0.1, metric=None, reg=None, l1_coef=0, l2_coef=0, sgd_sample=None, random_state=None):
-#___________________________________________________________________________________________________________________________________________________________________________________________
-
         self.n_iter = n_iter
-                     
         self.learning_rate = learning_rate 
-        
-
-        self.weights = None
-                           
+        self.weights = None 
         self.metric = metric if metric else 'mse'   
-        
-        self.reg = reg 
-                                  
+        self.reg = reg                         
         self.l1_coef = l1_coef 
-        
-        self.l2_coef = l2_coef
-                     
-        self.sgd_sample = sgd_sample
-                  
+        self.l2_coef = l2_coef           
+        self.sgd_sample = sgd_sample        
         self.random_state = random_state
-          
         self.best_score_ = np.inf
-        
         self.components = None
         
 #___________________________________________________________________________________________________________________________________________________________________________________________
