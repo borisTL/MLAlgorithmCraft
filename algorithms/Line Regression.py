@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from numpy import random
 
-class MyLineReg:
+class LineRegression :
     def __init__(self, n_iter=100, learning_rate=0.1, metric=None, reg=None, l1_coef=0, l2_coef=0, sgd_sample=None, random_state=42):
         self.n_iter = n_iter
         self.learning_rate = learning_rate
