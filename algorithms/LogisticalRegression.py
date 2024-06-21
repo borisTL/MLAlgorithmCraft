@@ -117,4 +117,4 @@ class LogRegression:
 
     def __repr__(self):
         return f"MyLogReg class: n_iter={self.n_iter}, learning_rate={self.learning_rate}"
-"
+
