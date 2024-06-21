@@ -1,7 +1,7 @@
 import random
 import numpy as np
 
-class MyLogReg:
+class LogRegression:
     def __init__(self, n_iter=100, learning_rate=0.1, weights=None, metric=None, reg=None, l1_coef=None, l2_coef=None, sgd_sample=None, random_state=42):
         self.n_iter = n_iter
         self.learning_rate = learning_rate
