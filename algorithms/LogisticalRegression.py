@@ -1,177 +1,120 @@
-import numpy as np
-import pandas as pd
 import random
+import numpy as np
 
-class LogisticRegression:
-    
-    def __init__(self, n_iter=10, learning_rate=0.01, reg=None, l1_coef=0, l2_coef=0, metric=None, sgd_sample=None, random_state=42):
-        self._iter = n_iter
-        self._learning_rate = learning_rate
-        self.weights = None
+class MyLogReg:
+    def __init__(self, n_iter=100, learning_rate=0.1, weights=None, metric=None, reg=None, l1_coef=None, l2_coef=None, sgd_sample=None, random_state=42):
+        self.n_iter = n_iter
+        self.learning_rate = learning_rate
+        self.weights = weights
+        self.metric = metric
+        self.best_score = None
         self.reg = reg
         self.l1_coef = l1_coef
         self.l2_coef = l2_coef
-        self.metric = metric
-        self.best_score = None
         self.sgd_sample = sgd_sample
         self.random_state = random_state
 
-    def fit(self, X, y, verbose=False):
-        np.random.seed(self.random_state)
+    def calc_metric(self, y_true, y_pred):
+        true_positives = np.sum((y_true == 1) & (y_pred == 1))
+        false_positives = np.sum((y_pred == 1) & (y_true == 0))
+        false_negatives = np.sum((y_pred == 0) & (y_true == 1))
+        precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) != 0 else 0
+        recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) != 0 else 0
+        if self.metric == "accuracy":
+            return np.sum(y_true == y_pred) / y_true.shape[0]
+        if self.metric == "precision":
+            return precision
+        if self.metric == "recall":
+            return recall
+        if self.metric == "f1":
+            return 2 * precision * recall / (precision + recall) if (precision + recall) != 0 else 0
+        if self.metric == "roc_auc":
+            y_pred = np.round(y_pred, 10)
+            score_sorted = sorted(zip(y_true, y_pred), key=lambda x: x[1])
+            ranked = 0
+            for i in range(len(score_sorted) - 1):
+                cur_true = score_sorted[i][0]
+                if cur_true == 1:
+                    continue
+                for j in range(i + 1, len(score_sorted)):
+                    if score_sorted[j][0] == 1 and score_sorted[j][1] == score_sorted[i][1]:
+                        ranked += 0.5
+                    elif score_sorted[j][0] == 1:
+                        ranked += 1
+            return ranked / np.sum(y_true == 1) / np.sum(y_true == 0)
+
+    def calc_loss(self, y_true, y_pred):
+        eps = 1e-15
+        loss = -np.mean(y_true * np.log(y_pred + eps) + (1 - y_true) * np.log(1 - y_pred + eps))
+        if self.reg == "l1":
+            loss += self.l1_coef * np.sum(np.abs(self.weights))
+        if self.reg == "l2":
+            loss += self.l2_coef * np.sum(np.square(self.weights))
+        if self.reg == "elasticnet":
+            loss += self.l1_coef * np.sum(np.abs(self.weights)) + self.l2_coef * np.sum(np.square(self.weights))
+        return loss
+
+    def calc_grad(self, data, y_true, y_pred):
+        grad = np.dot((y_pred - y_true).T, data) / data.shape[0]
+        if self.reg == "l1":
+            grad += self.l1_coef * np.sign(self.weights)
+        if self.reg == "l2":
+            grad += self.l2_coef * 2 * self.weights
+        if self.reg == "elasticnet":
+            grad += self.l1_coef * np.sign(self.weights) + self.l2_coef * 2 * self.weights
+        return grad
+
+    def calc_learning_rate(self, iteration):
+        return self.learning_rate if isinstance(self.learning_rate, (int, float)) else self.learning_rate(iteration)
+
+    def get_batch(self, data, labels):
+        if isinstance(self.sgd_sample, int):
+            sample_rows_idx = random.sample(range(data.shape[0]), self.sgd_sample)
+            return data.iloc[sample_rows_idx], labels.iloc[sample_rows_idx]
+        if isinstance(self.sgd_sample, float):
+            sample_size = int(data.shape[0] * self.sgd_sample)
+            sample_rows_idx = random.sample(range(data.shape[0]), sample_size)
+            return data.iloc[sample_rows_idx], labels.iloc[sample_rows_idx]
+        return data, labels
+
+    def fit(self, data_train, y_train, verbose=False):
         random.seed(self.random_state)
-        
-        X = pd.DataFrame(X)
-        y = pd.Series(y)
-        X.insert(0, "bias", pd.Series(1, index=X.index))
-        self.weights = np.ones(X.shape[1])
-        
-        if verbose:
-            start_loss = self.compute_loss(self.predict_proba(X), y)
-            metric_value = self.get_metric_score(self.predict(X), y) if self.metric else None
-            output = f"start | loss: {start_loss:.2f}"
-            if metric_value is not None:
-                output += f" | {self.metric}: {metric_value:.2f}"
-            print(output)
-
-        for i in range(1, self._iter + 1):
-            current_learning_rate = self._learning_rate(i) if callable(self._learning_rate) else self._learning_rate
-            
-            if self.sgd_sample is not None:
-                if isinstance(self.sgd_sample, float) and 0 < self.sgd_sample < 1:
-                    sample_size = int(self.sgd_sample * X.shape[0])
-                else:
-                    sample_size = self.sgd_sample
-                sample_rows_idx = random.sample(range(X.shape[0]), sample_size)
-                X_sample = X.iloc[sample_rows_idx]
-                y_sample = y.iloc[sample_rows_idx]
+        data = data_train.copy()
+        data["intercept"] = np.ones(data.shape[0])
+        self.weights = np.ones(data.shape[1])
+        for iter_num in range(self.n_iter):
+            x_batch, y_batch = self.get_batch(data, y_train)
+            predictions = 1 / (1 + np.exp(-np.dot(x_batch, self.weights)))
+            loss = self.calc_loss(y_train, 1 / (1 + np.exp(-np.dot(data, self.weights))))
+            grad = self.calc_grad(x_batch, y_batch, predictions)
+            self.weights -= self.calc_learning_rate(iter_num + 1) * grad
+            if verbose and (iter_num % verbose == 0) and not self.metric:
+                print(f"{iter_num} | loss: {loss}")
+                continue
+            if self.metric == "roc_auc":
+                metric = self.calc_metric(y_train, self.predict_proba(data))
             else:
-                X_sample = X
-                y_sample = y
-            
-            y_predicted = self.predict_proba(X_sample)
-            gradient = self.compute_gradient(X_sample, y_sample, y_predicted)
-            self.weights -= current_learning_rate * gradient
+                metric = self.calc_metric(y_train, self.predict(data))
+            self.best_score = metric
+            if verbose and (iter_num % verbose == 0):
+                print(f"{iter_num} | loss: {loss} | {self.metric}: {metric}")
 
-            loss = self.compute_loss(self.predict_proba(X), y)
-            if verbose and i % verbose == 0:
-                metric_value = self.get_metric_score(self.predict(X), y) if self.metric else None
-                output = f"{i} | loss: {loss:.2f} | learning_rate: {current_learning_rate:.5f}"
-                if metric_value is not None:
-                    output += f" | {self.metric}: {metric_value:.2f}"
-                print(output)
+    def predict_proba(self, x_test):
+        data = x_test.copy()
+        data["intercept"] = np.ones(data.shape[0])
+        predictions = 1 / (1 + np.exp(-np.dot(data, self.weights)))
+        return predictions
 
-            current_metric_value = self.get_metric_score(self.predict(X), y) if self.metric else None
-            if self.metric and current_metric_value is not None:
-                if self.best_score is None or \
-                   (self.metric in ['loss'] and current_metric_value < self.best_score) or \
-                   (self.metric not in ['loss'] and current_metric_value > self.best_score):
-                    self.best_score = current_metric_value
+    def predict(self, x_test):
+        predictions = self.predict_proba(x_test)
+        return np.where(predictions > 0.5, 1, 0)
 
     def get_coef(self):
-        return np.array(self.weights)
-        
-    def predict_proba(self, X):
-        X_with_bias = pd.DataFrame(X)
-        if "bias" not in X_with_bias.columns:
-            X_with_bias.insert(0, "bias", pd.Series(1, index=X_with_bias.index))
-        linear_combination = np.dot(X_with_bias, self.weights)
-        probabilities = 1 / (1 + np.exp(-linear_combination))
-        return probabilities
+        return self.weights[:-1]
 
-    def predict(self, X):
-        probabilities = self.predict_proba(X)
-        return (probabilities >= 0.5).astype(int)
-    
-    def compute_loss(self, y_predicted, y):
-        eps = 1e-15
-        y_predicted = np.clip(y_predicted, eps, 1 - eps)
-        log_loss = -np.mean(y * np.log(y_predicted) + (1 - y) * np.log(1 - y_predicted))
-        
-        if self.reg == 'l1':
-            penalty = self.l1_coef * np.sum(np.abs(self.weights[1:]))
-        elif self.reg == 'l2':
-            penalty = self.l2_coef * np.sum(self.weights[1:] ** 2)
-        elif self.reg == 'elasticnet':
-            l1_penalty = self.l1_coef * np.sum(np.abs(self.weights[1:]))
-            l2_penalty = self.l2_coef * np.sum(self.weights[1:] ** 2)
-            penalty = l1_penalty + l2_penalty
-        else:
-            penalty = 0
-        
-        return log_loss + penalty
-    
-    def compute_gradient(self, X, y, y_predicted):
-        gradient = np.dot(X.T, y_predicted - y) / len(y)
-        
-        if self.reg == 'l1':
-            reg_term = self.l1_coef * np.sign(self.weights)
-        elif self.reg == 'l2':
-            reg_term = self.l2_coef * 2 * self.weights
-        elif self.reg == 'elasticnet':
-            l1_term = self.l1_coef * np.sign(self.weights)
-            l2_term = self.l2_coef * 2 * self.weights
-            reg_term = l1_term + l2_term
-        else:
-            reg_term = np.zeros_like(self.weights)
-        
-        reg_term[0] = 0  # Do not regularize the bias term
-        
-        return gradient + reg_term
-
-    def compute_confusion_matrix(self, y_true, y_pred):
-        TP = np.sum((y_true == 1) & (y_pred == 1))
-        TN = np.sum((y_true == 0) & (y_pred == 0))
-        FP = np.sum((y_true == 0) & (y_pred == 1))
-        FN = np.sum((y_true == 1) & (y_pred == 0))
-        return np.array([[TN, FP], [FN, TP]])
-    
-    def calculate_roc_auc(self, y_pred, y):
-        probabilities = y_pred
-        rounded_probabilities = np.round(probabilities, decimals=10)
-        thresholds = np.unique(rounded_probabilities)
-        tprs = []
-        fprs = []
-
-        for threshold in thresholds:
-            y_pred = (rounded_probabilities >= threshold).astype(int)
-            TP = np.sum((y_pred == 1) & (y == 1))
-            FP = np.sum((y_pred == 1) & (y == 0))
-            TN = np.sum((y_pred == 0) & (y == 0))
-            FN = np.sum((y_pred == 0) & (y == 1))
-
-            TPR = TP / (TP + FN) if TP + FN != 0 else 0
-            FPR = FP / (FP + TN) if FP + TN != 0 else 0
-            tprs.append(TPR)
-            fprs.append(FPR)
-
-        sorted_indices = np.argsort(fprs)
-        sorted_fprs = np.array(fprs)[sorted_indices]
-        sorted_tprs = np.array(tprs)[sorted_indices]
-
-        roc_auc = np.trapz(sorted_tprs, sorted_fprs)
-        return roc_auc
-    
-    def get_metric_score(self, y_predicted, y):
-        confusion = self.compute_confusion_matrix(y, y_predicted)
-        TN, FP, FN, TP = confusion.ravel()
-
-        if self.metric == 'accuracy':
-            return (TP + TN) / (TP + FP + FN + TN)
-        elif self.metric == 'precision':
-            return TP / (TP + FP) if TP + FP != 0 else 0
-        elif self.metric == 'recall':
-            return TP / (TP + FN) if TP + FN != 0 else 0
-        elif self.metric == 'f1':
-            precision = TP / (TP + FP) if TP + FP != 0 else 0
-            recall = TP / (TP + FN) if TP + FN != 0 else 0
-            return 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-        elif self.metric == 'roc_auc':
-            return self.calculate_roc_auc(y_predicted, y)
-        else:
-            raise ValueError("Unknown metric specified")
-    
     def get_best_score(self):
         return self.best_score
 
-    def __str__(self):
-        return f"MyLogReg class: n_iter={self._iter}, learning_rate={self._learning_rate}, reg={self.reg}, l1_coef={self.l1_coef}, l2_coef={self.l2_coef}"
+    def __repr__(self):
+        return f"MyLogReg class: n_iter={self.n_iter}, learning_rate={self.learning_rate}"
+"
