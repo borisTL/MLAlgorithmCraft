@@ -13,6 +13,38 @@ class LogRegression:
         self.l2_coef = l2_coef
         self.sgd_sample = sgd_sample
         self.random_state = random_state
+        
+    def fit(self, data_train, y_train, verbose=False):
+        random.seed(self.random_state)
+        data = data_train.copy()
+        data["intercept"] = np.ones(data.shape[0])
+        self.weights = np.ones(data.shape[1])
+        for iter_num in range(self.n_iter):
+            x_batch, y_batch = self.get_batch(data, y_train)
+            predictions = 1 / (1 + np.exp(-np.dot(x_batch, self.weights)))
+            loss = self.calc_loss(y_train, 1 / (1 + np.exp(-np.dot(data, self.weights))))
+            grad = self.calc_grad(x_batch, y_batch, predictions)
+            self.weights -= self.calc_learning_rate(iter_num + 1) * grad
+            if verbose and (iter_num % verbose == 0) and not self.metric:
+                print(f"{iter_num} | loss: {loss}")
+                continue
+            if self.metric == "roc_auc":
+                metric = self.calc_metric(y_train, self.predict_proba(data))
+            else:
+                metric = self.calc_metric(y_train, self.predict(data))
+            self.best_score = metric
+            if verbose and (iter_num % verbose == 0):
+                print(f"{iter_num} | loss: {loss} | {self.metric}: {metric}")
+                
+    def predict_proba(self, x_test):
+        data = x_test.copy()
+        data["intercept"] = np.ones(data.shape[0])
+        predictions = 1 / (1 + np.exp(-np.dot(data, self.weights)))
+        return predictions
+
+    def predict(self, x_test):
+        predictions = self.predict_proba(x_test)
+        return np.where(predictions > 0.5, 1, 0)
 
     def calc_metric(self, y_true, y_pred):
         true_positives = np.sum((y_true == 1) & (y_pred == 1))
@@ -76,38 +108,6 @@ class LogRegression:
             sample_rows_idx = random.sample(range(data.shape[0]), sample_size)
             return data.iloc[sample_rows_idx], labels.iloc[sample_rows_idx]
         return data, labels
-
-    def fit(self, data_train, y_train, verbose=False):
-        random.seed(self.random_state)
-        data = data_train.copy()
-        data["intercept"] = np.ones(data.shape[0])
-        self.weights = np.ones(data.shape[1])
-        for iter_num in range(self.n_iter):
-            x_batch, y_batch = self.get_batch(data, y_train)
-            predictions = 1 / (1 + np.exp(-np.dot(x_batch, self.weights)))
-            loss = self.calc_loss(y_train, 1 / (1 + np.exp(-np.dot(data, self.weights))))
-            grad = self.calc_grad(x_batch, y_batch, predictions)
-            self.weights -= self.calc_learning_rate(iter_num + 1) * grad
-            if verbose and (iter_num % verbose == 0) and not self.metric:
-                print(f"{iter_num} | loss: {loss}")
-                continue
-            if self.metric == "roc_auc":
-                metric = self.calc_metric(y_train, self.predict_proba(data))
-            else:
-                metric = self.calc_metric(y_train, self.predict(data))
-            self.best_score = metric
-            if verbose and (iter_num % verbose == 0):
-                print(f"{iter_num} | loss: {loss} | {self.metric}: {metric}")
-
-    def predict_proba(self, x_test):
-        data = x_test.copy()
-        data["intercept"] = np.ones(data.shape[0])
-        predictions = 1 / (1 + np.exp(-np.dot(data, self.weights)))
-        return predictions
-
-    def predict(self, x_test):
-        predictions = self.predict_proba(x_test)
-        return np.where(predictions > 0.5, 1, 0)
 
     def get_coef(self):
         return self.weights[:-1]
