@@ -1,4 +1,4 @@
-# ml_library/models/quadratic_discriminant_analysis.py
+
 import numpy as np
 
 class QuadraticDiscriminantAnalysis:
