@@ -1,4 +1,4 @@
-# ml_library/models/regularized_discriminant_analysis.py
+
 import numpy as np
 
 class RegularizedDiscriminantAnalysis:
